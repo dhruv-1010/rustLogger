@@ -49,7 +49,7 @@ run: redis-check ## Start everything (API server + Drainer) - requires local Red
 
 server: redis-check ## Start only the API server (requires local Redis)
 	@echo "🚀 Starting API server..."
-	cargo run
+	cargo run --bin log_pipelines
 
 drainer: redis-check ## Start only the drainer service (requires local Redis)
 	@echo "🔄 Starting drainer service..."

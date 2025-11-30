@@ -2,6 +2,7 @@
 name = "log_pipelines"
 version = "0.1.0"
 edition = "2021"
+default-run = "log_pipelines"  # Default binary to run with `cargo run`
 
 [dependencies]
 axum = "0.7"
