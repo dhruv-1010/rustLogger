@@ -80,8 +80,13 @@ clean: ## Clean build artifacts
 stop: ## Stop all services
 	@echo "🛑 Stopping all services..."
 	@pkill -f "cargo run" || true
+	@pkill -f "log_pipelines" || true
+	@pkill -f "drainer" || true
+	@lsof -ti:3000 | xargs kill -9 2>/dev/null || true
 	@docker-compose down 2>/dev/null || true
 	@echo "✅ All services stopped"
+
+kill: stop ## Alias for stop command
 
 setup: ## Initial setup (build + check Redis)
 	@echo "⚙️  Setting up project..."
