@@ -38,13 +38,18 @@ build: ## Build the project
 
 run: redis-check ## Start everything (API server + Drainer) - requires local Redis
 	@echo "🚀 Starting full stack..."
-	@echo "   Starting API server in background..."
-	@cargo run &
+	@./run_all.sh
+
+run-simple: redis-check ## Start everything in background (simpler)
+	@echo "🚀 Starting full stack in background..."
+	@echo "   Starting API server..."
+	@cargo run --bin log_pipelines > /tmp/log_api_server.log 2>&1 &
 	@sleep 2
-	@echo "   Starting drainer service in background..."
-	@cargo run --bin drainer &
+	@echo "   Starting drainer service..."
+	@cargo run --bin drainer > /tmp/log_drainer.log 2>&1 &
 	@echo "✅ Full stack running!"
 	@echo "   API Server: http://127.0.0.1:3000"
+	@echo "   View logs: tail -f /tmp/log_api_server.log"
 	@echo "   To stop: make stop"
 
 server: redis-check ## Start only the API server (requires local Redis)
