@@ -14,12 +14,17 @@ async fn test_api_log_endpoint() {
     // You can run it with: cargo test --test api_test -- --ignored
     
     let config = Config::default();
-    let redis_client = redis::Client::open(&config.redis.url)
+    let redis_client = redis::Client::open(config.redis.url.as_str())
         .expect("Failed to connect to Redis");
+    
+    let rate_limiter = Arc::new(log_pipelines::rate_limit::RateLimiter::new(
+        config.server.rate_limit.clone(),
+    ));
     
     let state = AppState {
         redis_client: Arc::new(redis_client),
         config: config.clone(),
+        rate_limiter,
     };
     
     // Create test event
@@ -34,6 +39,7 @@ async fn test_api_log_endpoint() {
         &state.redis_client,
         &event,
         config.redis.key_expiration_seconds,
+        config.redis.disable_ttl,
     )
     .await;
     
@@ -44,7 +50,7 @@ async fn test_api_log_endpoint() {
 #[ignore]
 async fn test_redis_connection() {
     let config = Config::default();
-    let redis_client = redis::Client::open(&config.redis.url)
+    let redis_client = redis::Client::open(config.redis.url.as_str())
         .expect("Failed to connect to Redis");
     
     let mut conn = redis_client

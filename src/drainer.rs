@@ -166,6 +166,55 @@ pub async fn start_drainer(
             }
         };
         
+        // Safety check: Prioritize keys that are about to expire (if TTL is enabled)
+        // Get TTL for each key and sort by TTL (lowest first)
+        let mut keys_with_ttl: Vec<(String, i64)> = Vec::new();
+        let mut urgent_keys = Vec::new();
+        
+        for key in &keys {
+            let ttl: Result<i64, _> = conn.ttl(key).await;
+            match ttl {
+                Ok(ttl_seconds) => {
+                    if ttl_seconds == -1 {
+                        // Key exists but has no TTL (TTL disabled) - safe, normal priority
+                        keys_with_ttl.push((key.clone(), i64::MAX));
+                    } else if ttl_seconds == -2 {
+                        // Key doesn't exist (shouldn't happen, but handle it)
+                        eprintln!("⚠️  Key {} doesn't exist (may have expired)", key);
+                    } else if ttl_seconds > 0 {
+                        // Key has TTL - check if urgent
+                        if ttl_seconds < (config.interval_seconds * 2) as i64 {
+                            // Less than 2x drainer interval - URGENT!
+                            urgent_keys.push((key.clone(), ttl_seconds));
+                            eprintln!(
+                                "🚨 URGENT: Key {} has only {} seconds until expiration! Draining immediately...",
+                                key, ttl_seconds
+                            );
+                        } else {
+                            keys_with_ttl.push((key.clone(), ttl_seconds));
+                        }
+                    } else {
+                        // TTL is 0 or negative (expired) - try to drain anyway
+                        urgent_keys.push((key.clone(), 0));
+                        eprintln!("⚠️  Key {} may have expired (TTL: {}), attempting to drain...", key, ttl_seconds);
+                    }
+                }
+                Err(_) => {
+                    // If TTL check fails, assume key is safe
+                    keys_with_ttl.push((key.clone(), i64::MAX));
+                }
+            }
+        }
+        
+        // Sort by TTL (lowest first - most urgent)
+        keys_with_ttl.sort_by_key(|(_, ttl)| *ttl);
+        
+        // Combine: urgent keys first, then sorted by TTL
+        let mut final_keys: Vec<String> = urgent_keys.into_iter().map(|(k, _)| k).collect();
+        final_keys.extend(keys_with_ttl.into_iter().map(|(k, _)| k));
+        
+        let keys = final_keys;
+        
         let mut total_drained = 0;
         let mut total_failed = 0;
         let mut retried_keys = 0;

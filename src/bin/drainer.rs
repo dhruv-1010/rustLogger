@@ -2,6 +2,7 @@
 // This can be deployed as a separate service/container
 use log_pipelines::config::Config;
 use log_pipelines::drainer::start_drainer;
+use log_pipelines::cleanup::start_cleanup_service;
 use std::sync::Arc;
 
 #[tokio::main]
@@ -31,7 +32,14 @@ async fn main() {
     println!("\nPress Ctrl+C to stop the drainer\n");
     
     // Start the drainer (this runs forever)
-    let drainer_redis = Arc::new(redis_client);
+    let drainer_redis = Arc::new(redis_client.clone());
+    let cleanup_redis = Arc::new(redis_client);
+    let cleanup_config = config.clone();
+    
+    // Start cleanup service in background (only if TTL disabled)
+    tokio::spawn(start_cleanup_service(cleanup_redis, cleanup_config));
+    
+    // Start the drainer (this runs forever)
     start_drainer(drainer_redis, config.drainer).await;
 }
 

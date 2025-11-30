@@ -3,10 +3,12 @@ mod types;
 mod file_redis_layer;
 mod drainer;
 mod config;
+mod rate_limit;
 
 use axum::{
     extract::{Json, State},
     http::StatusCode,
+    middleware,
     routing::post,
     Router,
 };
@@ -17,6 +19,7 @@ use tokio::net::TcpListener;
 use types::{AppError, AppState, LogEvent};
 use file_redis_layer::write_to_cache;
 use config::Config;
+use rate_limit::rate_limit_middleware;
 
 // ============================================
 // API HANDLERS
@@ -33,6 +36,7 @@ async fn handle_log(
         &state.redis_client,
         &payload,
         state.config.redis.key_expiration_seconds,
+        state.config.redis.disable_ttl,
     )
     .await?;
     
@@ -60,19 +64,29 @@ async fn main() {
     
     println!("✅ Connected to Redis at {}", config.redis.url);
     
+    // Create rate limiter
+    let rate_limiter = Arc::new(rate_limit::RateLimiter::new(
+        config.server.rate_limit.clone(),
+    ));
+    
     // Create app state
     let state = AppState {
         redis_client: Arc::new(redis_client.clone()),
         config: config.clone(),
+        rate_limiter: rate_limiter.clone(),
     };
     
     // Note: Drainer is now a separate service
     // Run it with: cargo run --bin drainer
     // This allows the drainer to be scaled independently
     
-    // Create router
+    // Create router with rate limiting middleware
     let app = Router::new()
         .route("/log", post(handle_log))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            rate_limit_middleware,
+        ))
         .with_state(state);  // Share state with handlers
     
     // Start server
@@ -83,10 +97,11 @@ async fn main() {
     println!("\n💡 Architecture:");
     println!("   1. Write → Redis (instant, in-memory)");
     println!("   2. Separate drainer service → Files (run with: cargo run --bin drainer)");
-    println!(
-        "   3. Redis auto-expires keys after {} seconds",
-        config.redis.key_expiration_seconds
-    );
+    if let Some(ttl) = config.redis.key_expiration_seconds {
+        println!("   3. Redis auto-expires keys after {} seconds (safety net)", ttl);
+    } else {
+        println!("   3. Redis TTL disabled - drainer handles all cleanup");
+    }
     println!("\n📁 Module Structure:");
     println!("   • types.rs - Shared types (LogEvent, AppError, AppState)");
     println!("   • file_redis_layer.rs - Redis cache operations");

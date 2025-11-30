@@ -5,14 +5,41 @@
 host = "127.0.0.1"
 port = 3000
 
+[server.rate_limit]
+# Maximum requests per minute per IP
+requests_per_minute = 100
+# Burst allowance (how many requests can be made instantly)
+burst_size = 20
+
 [redis]
 url = "redis://127.0.0.1:6379"
-# How long keys stay in Redis before expiring (in seconds)
-key_expiration_seconds = 600  # 10 minutes
+# TTL Configuration - CRITICAL for data safety and memory management!
+# 
+# Hybrid Approach (RECOMMENDED):
+# - TTL enabled as safety net (very long, e.g., 24 hours)
+# - Drainer handles normal cleanup (every 30s via DELETE)
+# - TTL catches keys that drainer somehow misses (prevents Redis memory bloat)
+#
+disable_ttl = false
+# TTL should be MUCH longer than drainer interval (recommended: 100x+)
+# Example: drainer runs every 30s → TTL should be >= 3000s (50 minutes)
+# Recommended: 86400s (24 hours) for safety
+key_expiration_seconds = 86400  # 24 hours - safety net
+#
+# Why this approach?
+# - Drainer runs every 30s and deletes keys after successful drain (normal path)
+# - TTL acts as backup: if drainer fails/misses a key, TTL cleans it up after 24h
+# - Prevents Redis memory bloat from accumulated keys
+# - No data loss: TTL is long enough that drainer always gets multiple chances
+#
+# Option 2: Disable TTL (NOT RECOMMENDED)
+# disable_ttl = true
+# # If drainer fails, keys accumulate forever → Redis memory issues!
 
 [drainer]
 # How often to drain Redis cache to files (in seconds)
-interval_seconds = 60  # 1 minute (for testing)
+# IMPORTANT: If using TTL, it must be >= 5x this value to prevent data loss
+interval_seconds = 30  # 30 seconds (more frequent = safer, prevents data loss)
 # Redis key pattern to match for draining
 log_pattern = "logs:user_*:*"
 # Maximum retries for a failed key before giving up

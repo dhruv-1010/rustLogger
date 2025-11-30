@@ -21,7 +21,8 @@ pub fn get_log_file_path(user_id: &str, timestamp: u64) -> String {
 pub async fn write_to_cache(
     redis_client: &redis::Client,
     event: &LogEvent,
-    expiration_seconds: u64,
+    expiration_seconds: Option<u64>,
+    disable_ttl: bool,
 ) -> Result<(), AppError> {
     // Get Redis connection from pool
     let mut conn = redis_client
@@ -42,10 +43,15 @@ pub async fn write_to_cache(
         .await
         .map_err(|e| AppError::RedisError(e.to_string()))?;
     
-    // Set expiration on the key
-    conn.expire::<_, ()>(&key, expiration_seconds as i64)
-        .await
-        .map_err(|e| AppError::RedisError(e.to_string()))?;
+    // Set expiration on the key (only if TTL is enabled)
+    if !disable_ttl {
+        if let Some(ttl) = expiration_seconds {
+            conn.expire::<_, ()>(&key, ttl as i64)
+                .await
+                .map_err(|e| AppError::RedisError(e.to_string()))?;
+        }
+    }
+    // If disable_ttl is true, we rely on drainer DELETE only (safest)
     
     Ok(())
 }

@@ -70,5 +70,6 @@ impl axum::response::IntoResponse for AppError {
 pub struct AppState {
     pub redis_client: Arc<redis::Client>,
     pub config: crate::config::Config,
+    pub rate_limiter: Arc<crate::rate_limit::RateLimiter>,
 }
 
