@@ -1,0 +1,22 @@
+# Log Pipelines Configuration
+# Copy this file to config.toml and modify as needed
+
+[server]
+host = "127.0.0.1"
+port = 3000
+
+[redis]
+url = "redis://127.0.0.1:6379"
+# How long keys stay in Redis before expiring (in seconds)
+key_expiration_seconds = 600  # 10 minutes
+
+[drainer]
+# How often to drain Redis cache to files (in seconds)
+interval_seconds = 60  # 1 minute (for testing)
+# Redis key pattern to match for draining
+log_pattern = "logs:user_*:*"
+# Maximum retries for a failed key before giving up
+max_retries = 3
+# Delay between retries (in seconds)
+retry_delay_seconds = 30
+
